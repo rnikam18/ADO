@@ -1,52 +1,71 @@
-parameters:
-- name: rootFolder
-  type: string
-- name: tfvarsFile
-  type: string
-- name: adoEnvironment
-  type: string
+trigger: none
 
-env:
-ARM_CLIENT_ID: $(ARM_CLIENT_ID)
-ARM_CLIENT_SECRET: $(ARM_CLIENT_SECRET)
-ARM_SUBSCRIPTION: $(ARM_SUBSCRIPTION)
-ARM_TENANT_ID: $(ARM_TENANT_ID)
+pool:
+ vmImage: ubuntu-latest
+
+variables:
+  bkstrgrg: 'rjn'
+  bkstrg: 'rohit090909'
+  bkcontainer: 'tfstate'
+  bkstrgkey: 'key.tfstate'
 
 stages:
-- stage: 'Terraform_Plan'
-  displayName: 'Terraform Plan'
-  jobs:
-  - job: 'Terraform_Plan'
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - script: |
-        echo "Running Terraform init..."
-        terraform init
-        echo "Running Terraform plan..."
-        terraform plan -var-file ${{ parameters.tfvarsFile }}
-      displayName: 'Terraform plan'
-      workingDirectory: ${{ parameters.rootFolder }}
+  - stage: tfvalidate
+    jobs: 
+    - job: validate
+      continueOnError: false
+      steps:
+         - task: TerraformInstaller@1
+           displayName: tfinstall
+           inputs:
+              terraformVersion: 'latest'
 
-- stage: 'Terraform_Apply'
-  displayName: 'Terraform Apply'
-  dependsOn:
-  - 'Terraform_Plan'
-  condition: succeeded()
-  jobs:
-  - deployment: 'Terraform_Apply'
-    pool:
-      vmImage: 'ubuntu-latest'
-    environment: ${{ parameters.adoEnvironment }} # using an ADO environment allows us to add a manual approval check
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - checkout: self
-          - script: |
-              echo "Running Terraform init..."
-              terraform init
-              echo "Running Terraform apply..."
-              terraform apply -var-file ${{ parameters.tfvarsFile }} -auto-approve
-            displayName: 'Terraform apply'
-            workingDirectory: ${{ parameters.rootFolder }}
+         - task: TerraformTaskV4@4
+           displayName: init
+           inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: 'azure'
+              backendAzureRmResourceGroupName: '$(bkstrgrg)'
+              backendAzureRmStorageAccountName: '$(bkstrg)'
+              backendAzureRmContainerName: '$(bkcontainer)'
+              backendAzureRmKey: '$(key.tfstate)'
+         - task: TerraformTaskV4@4
+           displayName: validate
+           inputs:
+             provider: 'azurerm'
+             command: 'validate'
+  - stage: tfdeploy
+    condition: succeeded(tfvalidate)
+    dependsOn: tfvalidate
+    jobs:
+      - job: apply
+        steps:
+          - task: TerraformInstaller@1
+            displayName: tfinstall
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: TerraformTaskV4@4
+            displayName: init
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: 'azure'
+              backendAzureRmResourceGroupName: '$(bkstrgrg)'
+              backendAzureRmStorageAccountName: '$(bkstrg)'
+              backendAzureRmContainerName: '$(bkcontainer)'
+              backendAzureRmKey: '$(key.tfstate)'
+          - task: TerraformTaskV4@4
+            displayName: plan          
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              environmentServiceNameAzureRM: 'azure'
+          - task: TerraformTaskV4@4
+            displayName: apply
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              environmentServiceNameAzureRM: 'azure'
+  
