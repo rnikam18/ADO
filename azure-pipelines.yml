@@ -10,7 +10,7 @@ variables:
   bkstrgkey: 'key.tfstate'
 
 stages:
-  - stage: terraformvalidate
+  - stage: tfvalidate
     jobs: 
     - job: validate
       continueOnError: false
@@ -36,7 +36,7 @@ stages:
              provider: 'azurerm'
              command: 'validate'
   - stage: tfdeploy
-    condition: succeeded(tfvalidate)
+    condition: succeeded('tfvalidate')
     dependsOn: tfvalidate
     jobs:
       - job: apply
