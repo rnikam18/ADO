@@ -10,7 +10,7 @@ variables:
   bkstrgkey: 'key.tfstate'
 
 stages:
-  - stage: tfvalidate
+  - stage: terraformvalidate
     jobs: 
     - job: validate
       continueOnError: false
@@ -63,7 +63,7 @@ stages:
               command: 'plan'
               environmentServiceNameAzureRM: 'azure'
           - task: TerraformTaskV4@4
-            displayName: apply
+            displayName: terraformapply
             inputs:
               provider: 'azurerm'
               command: 'apply'
